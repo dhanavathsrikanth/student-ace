@@ -22,24 +22,48 @@ export function XPBar() {
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    const controller = new AbortController();
+    let controller: AbortController | null = null;
     let inFlight = false;
+    let isMounted = true;
+
     async function fetchLevel() {
-      if (document.hidden || inFlight) return;
+      if (document.hidden || inFlight || !isMounted) return;
       inFlight = true;
+      controller = new AbortController();
       try {
         const res = await fetch("/api/xp/level", { signal: controller.signal });
         if (!res.ok) throw new Error("Unable to load XP");
         const json = await res.json();
-        if (!controller.signal.aborted) { setData(json); setFailed(false); }
-      } catch {
-        if (!controller.signal.aborted) setFailed(true);
-      } finally { inFlight = false; }
+        if (isMounted) {
+          setData(json);
+          setFailed(false);
+        }
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (typeof err === "object" && err !== null && "name" in err && (err as { name: string }).name === "AbortError") return;
+        setFailed(true);
+      } finally {
+        inFlight = false;
+      }
     }
+
     fetchLevel();
     const interval = setInterval(fetchLevel, 10000);
     document.addEventListener("visibilitychange", fetchLevel);
-    return () => { controller.abort(); clearInterval(interval); document.removeEventListener("visibilitychange", fetchLevel); };
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", fetchLevel);
+      if (controller) {
+        try {
+          controller.abort();
+        } catch {
+          // ignore abort issues during unmount
+        }
+      }
+    };
   }, []);
 
   if (!data) return <div className={styles.status} role="status">{failed ? "Level progress temporarily unavailable" : "Loading your level…"}</div>;

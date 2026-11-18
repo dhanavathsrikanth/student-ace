@@ -121,31 +121,46 @@ create policy "Admins can insert XP rules"
 
 -- 9. Seed data
 
--- Seed badge definitions (matching existing hardcoded badges)
+-- Seed badge definitions (Prestigious Medals of Merit & Commendation Citations)
 insert into public.badge_definitions (name, description, icon_emoji, condition_type, condition_value, xp_reward, slug, is_active) values
-  ('Week Warrior', 'Maintained a 7-day practice streak', '🔥', 'streak_days', 7, 150, 'week_warrior', true),
-  ('Iron Will', 'Maintained a 30-day practice streak', '💪', 'streak_days', 30, 500, 'iron_will', true),
-  ('Subject Master', 'Achieved 80%+ accuracy in all subjects', '🎓', 'all_subjects_mastered', 80, 1000, 'subject_master', true)
-on conflict (slug) do nothing;
+  ('Commissioning Scroll', 'Completed your first full simulation under timed exam conditions', '🎯', 'tests_completed', 1, 100, 'first_test', true),
+  ('Vanguard Citation', 'Maintained an unbroken 7-day operational practice streak', '🔥', 'streak_days', 7, 150, 'week_warrior', true),
+  ('Sharpshooter Insignia', 'Achieved 100% precision on a test assessment', '💯', 'perfect_scores', 1, 200, 'perfect_score', true),
+  ('Centurion Citation', 'Answered 100 verified examination questions correctly', '⚔️', 'questions_correct', 100, 250, 'centurion', true),
+  ('Iron Discipline Medal', 'Maintained a 30-day unwavering daily study streak', '🛡️', 'streak_days', 30, 500, 'iron_will', true),
+  ('Regimental Mastery', 'Achieved 80%+ accuracy across all syllabus subjects', '🎓', 'all_subjects_mastered', 80, 1000, 'subject_master', true)
+on conflict (slug) do update set
+  name = excluded.name,
+  description = excluded.description,
+  icon_emoji = excluded.icon_emoji,
+  xp_reward = excluded.xp_reward;
 
--- Seed level thresholds (matching XP_THRESHOLDS in lib/xp.ts)
+-- Seed level thresholds (Dignified Commissioned Officer Ranks)
 insert into public.level_thresholds (level, name, xp_required) values
-  (0, 'Trainee', 0),
-  (1, 'Junior AEE', 500),
-  (2, 'AEE', 1500),
-  (3, 'Senior AEE', 3500),
-  (4, 'Assistant Executive', 7000),
-  (5, 'Executive Engineer', 12000),
-  (6, 'Chief Engineer', 20000)
-on conflict (level) do nothing;
+  (0, 'Officer Cadet', 0),
+  (1, 'Lieutenant', 500),
+  (2, 'Captain', 1500),
+  (3, 'Major', 3500),
+  (4, 'Colonel', 7000),
+  (5, 'Brigadier', 12000),
+  (6, 'General', 20000)
+on conflict (level) do update set
+  name = excluded.name,
+  xp_required = excluded.xp_required;
 
 -- Seed XP rules (matching XP_REWARDS in lib/xp.ts)
 insert into public.xp_rules (event_key, label, description, amount) values
-  ('correct_answer', 'Correct Answer', 'Per correct answer in a test', 10),
-  ('perfect_score_bonus', 'Perfect Score Bonus', 'Bonus for answering all questions correctly', 50),
-  ('daily_question_correct', 'Daily Question Correct', 'Answering the daily question correctly', 25),
-  ('daily_question_attempted', 'Daily Question Attempted', 'Attempting the daily question', 10),
-  ('week_warrior_streak', 'Week Warrior Streak', '7-day streak milestone', 150),
-  ('iron_will_streak', 'Iron Will Streak', '30-day streak milestone', 500),
-  ('first_test_bonus', 'First Test Bonus', 'Completing first test', 100)
-on conflict (event_key) do nothing;
+  ('correct_answer', 'Correct Answer', 'Standard tactical reward per correct question', 10),
+  ('high_accuracy_bonus', 'High Accuracy Bonus', 'Awarded for >=80% accuracy in tests with >=10 questions', 50),
+  ('perfect_score_bonus', 'Sharpshooter Bonus', 'Awarded for achieving 100% accuracy in tests with >=5 questions', 100),
+  ('full_mock_completed', 'Full Mock Stamina Bonus', 'Awarded for completing full-length test with >=30 questions', 150),
+  ('mini_mock_completed', 'Sprint Mock Bonus', 'Awarded for completing sprint test with >=15 questions', 50),
+  ('daily_question_correct', 'Daily Recon Correct', 'Solving the daily tactical question correctly', 25),
+  ('daily_question_attempted', 'Daily Recon Attempted', 'Attempting the daily tactical question', 10),
+  ('week_warrior_streak', 'Vanguard 7-Day Streak', '7-day operational practice streak milestone', 150),
+  ('iron_will_streak', 'Iron Discipline 30-Day Streak', '30-day unwavering study streak milestone', 500),
+  ('first_test_bonus', 'Commissioning Test Bonus', 'Completing your inaugural examination simulation', 100)
+on conflict (event_key) do update set
+  label = excluded.label,
+  description = excluded.description,
+  amount = excluded.amount;

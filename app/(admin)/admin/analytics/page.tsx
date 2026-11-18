@@ -31,7 +31,7 @@ export default async function AnalyticsPage() {
   ] = await Promise.all([
     supabase.from("profiles").select("id, created_at"),
     supabase.from("streaks").select("user_id, current_streak, last_activity_date"),
-    supabase.from("test_sessions").select("user_id, total_questions, subject_id, year, mode, started_at, completed_at, status, duration_minutes, subjects!inner(name)").gte("started_at", thirtyDaysAgo).limit(5000),
+    supabase.from("test_sessions").select("user_id, total_questions, subject_id, year, mode, started_at, completed_at, status, duration_minutes, subjects(name)").gte("started_at", thirtyDaysAgo).limit(5000),
     supabase.from("test_answers").select("question_id, is_correct, selected_option, selected_options, numeric_answer, questions(question_text, subject_id, marks_to_all, subjects(name))").limit(10000),
     supabase.from("bookmarks").select("question_id, questions(question_text, subjects(name))"),
     supabase.from("xp_transactions").select("amount, created_at").gte("created_at", thirtyDaysAgo).limit(5000),
@@ -228,7 +228,15 @@ export default async function AnalyticsPage() {
     if (s.status === "completed") totalStarted++;
     if (s.status === "abandoned") abandonedCount++;
 
-    if (s.subjects?.name) subjectCounts[s.subjects.name] = (subjectCounts[s.subjects.name] || 0) + 1;
+    if (s.subjects?.name) {
+      subjectCounts[s.subjects.name] = (subjectCounts[s.subjects.name] || 0) + 1;
+    } else if (s.mode === "full_mock" || s.mode === "pyq_full") {
+      subjectCounts["Full Mock"] = (subjectCounts["Full Mock"] || 0) + 1;
+    } else if (s.mode === "sprint") {
+      subjectCounts["Practice Sprint"] = (subjectCounts["Practice Sprint"] || 0) + 1;
+    } else {
+      subjectCounts["Full Paper / Multi-Subject"] = (subjectCounts["Full Paper / Multi-Subject"] || 0) + 1;
+    }
     if (s.year) yearCounts[String(s.year)] = (yearCounts[String(s.year)] || 0) + 1;
     if (s.mode) modeCounts[s.mode] = (modeCounts[s.mode] || 0) + 1;
   });

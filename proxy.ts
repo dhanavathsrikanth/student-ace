@@ -13,6 +13,19 @@ export async function proxy(request: NextRequest) {
   }
   // The standalone practice calculator does not require an account.
   if (request.nextUrl.pathname === "/calculator") return NextResponse.next();
+
+  // Public legal & compliance pages never require an account or authentication.
+  const isLegalRoute = [
+    "/terms",
+    "/privacy",
+    "/disclaimer",
+    "/refund-policy",
+    "/contact",
+  ].some((path) => request.nextUrl.pathname.startsWith(path));
+
+  if (isLegalRoute) {
+    return NextResponse.next();
+  }
   // These handlers authenticate using signed links, provider signatures, or the
   // cron bearer secret. They must work without a student's browser session.
   if (

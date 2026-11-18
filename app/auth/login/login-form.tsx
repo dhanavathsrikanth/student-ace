@@ -156,6 +156,18 @@ export function LoginForm({ initialError = null }: { initialError?: string | nul
             Sign up
           </Link>
         </div>
+
+        <p className="text-center text-[11px] text-muted-foreground leading-relaxed pt-2 border-t">
+          By signing in, you agree to our{" "}
+          <Link href="/terms" className="text-primary underline underline-offset-2 hover:opacity-80">
+            Terms of Service
+          </Link>{" "}
+          and acknowledge our{" "}
+          <Link href="/privacy" className="text-primary underline underline-offset-2 hover:opacity-80">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </CardContent>
     </Card>
   );

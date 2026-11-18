@@ -192,8 +192,9 @@ async function fetchQuestions(
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
-  const { user, exam, stream } = await requireExamContext();
+  const { user, exam, profile, stream } = await requireExamContext();
   const userId = user.id;
+  const isAdmin = profile?.role === "admin";
 
   const sessions = await fetchSessions(supabase, userId, exam.id, stream?.id ?? null);
   if (sessions.length === 0) {
@@ -483,9 +484,11 @@ export default async function AnalyticsPage() {
 
   return (
     <AnalyticsContent
+      isAdmin={isAdmin}
       totalTests={sessions.length}
       overall={overall.stats}
       byType={overall.byType}
+      byTier={overall.byTier}
       subjectStats={overall.bySubject}
       topicStats={topics}
       scoreTrend={scoreTrend}

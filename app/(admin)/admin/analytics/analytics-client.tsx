@@ -44,6 +44,21 @@ const ICON_COLORS: Record<string, string> = {
 
 // ─── Sub-components ──────────────────────────────────────────────
 
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.41a8.177 8.177 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.53 11.64c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.02-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1s.9 2.44 1.03 2.61c.13.17 1.77 2.7 4.29 3.79.6.26 1.07.41 1.43.53.6.19 1.15.16 1.58.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.06-.1-.21-.17-.46-.29" />
+    </svg>
+  );
+}
+
 function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: string; value: string | number; sub?: string; color: string }) {
   return (
     <div className="border rounded-xl p-4">
@@ -121,12 +136,42 @@ export function AnalyticsClient({
   const HOURS = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
   const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+  const handleWhatsAppAdminShare = () => {
+    const text = `📊 *StudentAce Platform Analytics*
+━━━━━━━━━━━━━━━━━━━━━
+👥 *Total Users:* ${stats.totalUsers.toLocaleString()} (New this week: +${stats.newThisWeek})
+⚡ *Active Users:* ${stats.activeToday} today · ${stats.activeWeek} this week
+📝 *Total Tests Completed:* ${stats.totalTests.toLocaleString()} (${stats.completionRate}% completion rate)
+🎯 *Global Accuracy:* ${stats.globalAccuracy}%
+📚 *Top Subject:* ${stats.mostPopularSubject}
+━━━━━━━━━━━━━━━━━━━━━
+👉 Open Admin Analytics: https://studentace.in/admin/analytics`;
+
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    if (typeof window !== "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* ─── Header ─── */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Platform-wide performance and engagement metrics</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Platform-wide performance and engagement metrics</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleWhatsAppAdminShare}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-background px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30 transition-colors shadow-xs"
+            title="Share platform summary on WhatsApp"
+          >
+            <WhatsAppIcon className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+            WhatsApp Summary
+          </button>
+        </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════════

@@ -6,16 +6,30 @@ import { DAILY_REVISION_CAP, type RevisionQueue, type RevisionQuestion } from "@
 export interface DeckQuestion {
   id: string;
   stage: number;
+  interval_days?: number;
+  repetition_count?: number;
   nextReviewDate?: string | null;
+  mastered_at?: string | null;
   source: "srs" | "mistake" | "bookmark";
   question: RevisionQuestion["question"];
 }
 
+export interface DeckForecast {
+  stage: number;
+  label: string;
+  intervalDays: number;
+  count: number;
+}
+
 export interface DeckInfo {
   totalCount: number;
+  dueTodayCount: number;
   scheduledTomorrow: number;
   stageCounts: Record<number, number>;
   masteredCount: number;
+  retentionRate: number;
+  forecast: DeckForecast[];
+  sourceCounts: { srs: number; mistake: number; bookmark: number };
   questions: DeckQuestion[];
   /** True when direct SELECT on spaced_repetition is permission-blocked. */
   srsSelectFailed?: boolean;
@@ -38,9 +52,6 @@ export async function getRevisionQueue(): Promise<RevisionQueue> {
     const { data, error } = await supabase.rpc("revision_queue", { p_exam: exam.id, p_stream: stream?.id ?? null });
     if (!error && data && Array.isArray((data as RevisionQueue).questions)) {
       const qData = data as RevisionQueue;
-      if (qData.questions.length > 0) {
-        return qData;
-      }
       return qData;
     }
   } catch (rpcErr) {
@@ -51,10 +62,22 @@ export async function getRevisionQueue(): Promise<RevisionQueue> {
   const deck = await getRevisionDeck();
   const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
-  const sorted = [...deck.questions].sort((a, b) => a.stage - b.stage);
-  const queueQuestions: RevisionQuestion[] = sorted.slice(0, DAILY_REVISION_CAP).map(q => ({
+  // Prioritize due questions today, lower stages first
+  const dueQuestions = deck.questions.filter(
+    (q) => !q.nextReviewDate || q.nextReviewDate <= todayStr
+  );
+  const remaining = deck.questions.filter(
+    (q) => q.nextReviewDate && q.nextReviewDate > todayStr
+  );
+  const sorted = [...dueQuestions, ...remaining].sort((a, b) => a.stage - b.stage);
+
+  const queueQuestions: RevisionQuestion[] = sorted.slice(0, DAILY_REVISION_CAP).map((q) => ({
     id: q.id,
     stage: q.stage,
+    interval_days: q.interval_days,
+    repetition_count: q.repetition_count,
+    next_review_date: q.nextReviewDate,
+    source: q.source,
     question: q.question,
   }));
 
@@ -124,41 +147,42 @@ export const getRevisionDeck = cache(async (): Promise<DeckInfo> => {
   if (!user || !exam) throw new Error("Choose an exam first");
   const supabase = await createClient();
 
-  // 1. Query spaced_repetition. Direct SELECT on this table is permission
-  //    revoked by migration 20261104161916 (no SELECT grant, no RLS policy).
-  //    If it fails, degrade gracefully: SRS items come from the RPC queue
-  //    instead, and the deck shows bookmarks + whatever the RPC returns.
   let srsData: any[] | null = null;
   let srsSelectFailed = false;
   const [fullQuery, { data: sessions }, { data: bookmarks }] = await Promise.all([
     supabase
-    .from("spaced_repetition")
-    .select("id, question_id, stage, interval_days, next_review_date, repetition_count, mastered_at, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)")
-    .eq("user_id", user.id),
+      .from("spaced_repetition")
+      .select(
+        "id, question_id, stage, interval_days, next_review_date, repetition_count, mastered_at, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)"
+      )
+      .eq("user_id", user.id),
     supabase
-    .from("test_sessions")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("status", "completed")
-    .eq("exam_id", exam.id)
-    .or(stream ? `stream_id.eq.${stream.id},stream_id.is.null` : "stream_id.is.null")
-    .order("completed_at", { ascending: false })
-    .limit(30),
+      .from("test_sessions")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "completed")
+      .eq("exam_id", exam.id)
+      .order("completed_at", { ascending: false })
+      .limit(50),
     supabase
-    .from("bookmarks")
-    .select("question_id, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)")
-    .eq("user_id", user.id)
-    .limit(50),
+      .from("bookmarks")
+      .select(
+        "question_id, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)"
+      )
+      .eq("user_id", user.id)
+      .limit(100),
   ]);
 
   if (!fullQuery.error && fullQuery.data) {
     srsData = fullQuery.data;
   } else {
     srsSelectFailed = true;
-    console.warn("spaced_repetition SELECT unavailable; deck will exclude SRS items:", fullQuery.error);
+    console.warn("spaced_repetition SELECT unavailable; deck will exclude direct SRS items:", fullQuery.error);
     const baseQuery = await supabase
       .from("spaced_repetition")
-      .select("id, question_id, interval_days, next_review_date, repetition_count, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)")
+      .select(
+        "id, question_id, interval_days, next_review_date, repetition_count, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)"
+      )
       .eq("user_id", user.id);
     if (!baseQuery.error) {
       srsData = baseQuery.data;
@@ -166,89 +190,142 @@ export const getRevisionDeck = cache(async (): Promise<DeckInfo> => {
     }
   }
 
-  const sessionIds = (sessions || []).map(s => s.id);
-  const { data: wrongAnswers } = sessionIds.length > 0 ? await supabase
-    .from("test_answers")
-    .select("question_id, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)")
-    .in("session_id", sessionIds)
-    .eq("is_correct", false)
-    .limit(100) : { data: [] };
+  const sessionIds = (sessions || []).map((s) => s.id);
+  const { data: wrongAnswers } =
+    sessionIds.length > 0
+      ? await supabase
+          .from("test_answers")
+          .select(
+            "question_id, questions(id, question_text, question_type, option_1, option_2, option_3, option_4, correct_option, correct_options, correct_option_sets, answer_min, answer_max, answer_ranges, answer_decimal_places, explanation, year, image_url, image_width, image_height, option_images, exam_id, stream_id, marks_to_all)"
+          )
+          .in("session_id", sessionIds)
+          .eq("is_correct", false)
+          .limit(300)
+      : { data: [] };
 
   const questionsMap = new Map<string, DeckQuestion>();
   const stageCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const sourceCounts = { srs: 0, mistake: 0, bookmark: 0 };
   let masteredCount = 0;
   let scheduledTomorrow = 0;
+  let dueTodayCount = 0;
   const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
+  // Helper to check if a question is relevant to the student's exam
+  const matchesExam = (q: any) => {
+    if (!q || typeof q !== "object" || q.marks_to_all) return false;
+    if (q.exam_id && q.exam_id !== exam.id) return false;
+    return true;
+  };
+
+  // 1. Process SRS records
   for (const row of (srsData || []) as any[]) {
     const rawQ = Array.isArray(row.questions) ? row.questions[0] : row.questions;
-    if (!rawQ || typeof rawQ !== "object" || rawQ.marks_to_all) continue;
-    if (rawQ.exam_id && rawQ.exam_id !== exam.id) continue;
-    if (stream && rawQ.stream_id && rawQ.stream_id !== stream.id) continue;
+    if (!matchesExam(rawQ)) continue;
 
     const stage = Number(row.stage ?? getStageFromInterval(row.interval_days || 0));
+    const nextDate = row.next_review_date;
+
     if (row.mastered_at) {
       masteredCount++;
     } else {
       stageCounts[stage] = (stageCounts[stage] || 0) + 1;
-      if (row.next_review_date && row.next_review_date > todayStr) {
+      if (nextDate && nextDate <= todayStr) {
+        dueTodayCount++;
+      } else if (nextDate && nextDate > todayStr) {
         scheduledTomorrow++;
       }
     }
+    sourceCounts.srs++;
+
     const q = rawQ as unknown as RevisionQuestion["question"];
     questionsMap.set(q.id, {
       id: row.id,
       stage,
-      nextReviewDate: row.next_review_date,
+      interval_days: row.interval_days,
+      repetition_count: row.repetition_count,
+      nextReviewDate: nextDate,
+      mastered_at: row.mastered_at,
       source: "srs",
       question: q,
     });
   }
 
+  // 2. Process mistakes from test sessions (auto-enroll if not in SRS map)
   for (const ans of wrongAnswers || []) {
     const rawQ = Array.isArray(ans.questions) ? ans.questions[0] : ans.questions;
-    if (!rawQ || typeof rawQ !== "object" || rawQ.marks_to_all) continue;
-    if (rawQ.exam_id && rawQ.exam_id !== exam.id) continue;
-    if (stream && rawQ.stream_id && rawQ.stream_id !== stream.id) continue;
+    if (!matchesExam(rawQ)) continue;
 
     const q = rawQ as unknown as RevisionQuestion["question"];
     if (q && !questionsMap.has(q.id)) {
       stageCounts[1] = (stageCounts[1] || 0) + 1;
-      scheduledTomorrow++;
+      dueTodayCount++;
+      sourceCounts.mistake++;
       questionsMap.set(q.id, {
         id: `mistake-${q.id}`,
         stage: 1,
+        interval_days: 1,
+        repetition_count: 0,
+        nextReviewDate: todayStr, // Day 1 mistake is immediately due today!
         source: "mistake",
         question: q,
       });
     }
   }
 
+  // 3. Process bookmarks
   for (const bm of bookmarks || []) {
     const rawQ = Array.isArray(bm.questions) ? bm.questions[0] : bm.questions;
-    if (!rawQ || typeof rawQ !== "object" || rawQ.marks_to_all) continue;
-    if (rawQ.exam_id && rawQ.exam_id !== exam.id) continue;
-    if (stream && rawQ.stream_id && rawQ.stream_id !== stream.id) continue;
+    if (!matchesExam(rawQ)) continue;
 
     const q = rawQ as unknown as RevisionQuestion["question"];
     if (q && !questionsMap.has(q.id)) {
       stageCounts[1] = (stageCounts[1] || 0) + 1;
+      dueTodayCount++;
+      sourceCounts.bookmark++;
       questionsMap.set(q.id, {
         id: `bm-${q.id}`,
         stage: 1,
+        interval_days: 1,
+        repetition_count: 0,
+        nextReviewDate: todayStr,
         source: "bookmark",
         question: q,
       });
     }
   }
 
-  const allQuestions = Array.from(questionsMap.values());
+  // Sort questions: priority to user's stream, then common, then other papers of the exam
+  const allQuestions = Array.from(questionsMap.values()).sort((a, b) => {
+    const streamA = stream && a.question.stream_id === stream.id ? 0 : !a.question.stream_id ? 1 : 2;
+    const streamB = stream && b.question.stream_id === stream.id ? 0 : !b.question.stream_id ? 1 : 2;
+    if (streamA !== streamB) return streamA - streamB;
+    return a.stage - b.stage;
+  });
+
+  const totalActive = allQuestions.filter((q) => !q.mastered_at).length;
+  const advancedPastStage1 = allQuestions.filter((q) => q.mastered_at || q.stage > 1).length;
+  const retentionRate = totalActive + masteredCount > 0
+    ? Math.round((advancedPastStage1 / (totalActive + masteredCount)) * 100)
+    : 0;
+
+  const forecast: DeckForecast[] = [
+    { stage: 1, label: "Stage 1 · First Recall (Day 1)", intervalDays: 1, count: stageCounts[1] || 0 },
+    { stage: 2, label: "Stage 2 · Reinforce (3 Days)", intervalDays: 3, count: stageCounts[2] || 0 },
+    { stage: 3, label: "Stage 3 · Strengthen (7 Days)", intervalDays: 7, count: stageCounts[3] || 0 },
+    { stage: 4, label: "Stage 4 · Retain (14 Days)", intervalDays: 14, count: stageCounts[4] || 0 },
+    { stage: 5, label: "Stage 5 · Mastery Check (30 Days)", intervalDays: 30, count: stageCounts[5] || 0 },
+  ];
 
   return {
     totalCount: allQuestions.length,
+    dueTodayCount,
     scheduledTomorrow: srsSelectFailed ? 0 : scheduledTomorrow,
     stageCounts,
     masteredCount,
+    retentionRate,
+    forecast,
+    sourceCounts,
     questions: allQuestions,
     srsSelectFailed,
   };

@@ -58,22 +58,22 @@ interface ProfileContentProps {
 }
 
 const XP_LEVELS = [
-  { level: 0, name: "Trainee", xp: 0, icon: "🎓" },
-  { level: 1, name: "Explorer", xp: 500, icon: "📘" },
-  { level: 2, name: "Practitioner", xp: 1500, icon: "🔧" },
-  { level: 3, name: "Achiever", xp: 3500, icon: "🏛️" },
-  { level: 4, name: "Advanced Learner", xp: 7000, icon: "⚡" },
-  { level: 5, name: "Expert", xp: 12000, icon: "🌟" },
-  { level: 6, name: "Master", xp: 20000, icon: "👑" },
+  { level: 0, name: "Officer Cadet", xp: 0, icon: "🎖️", motto: "Committed to Discipline & Study" },
+  { level: 1, name: "Lieutenant", xp: 500, icon: "⭐", motto: "First Commission · Tactical Initiative" },
+  { level: 2, name: "Captain", xp: 1500, icon: "⚔️", motto: "Company Commander · High Speed & Accuracy" },
+  { level: 3, name: "Major", xp: 3500, icon: "🦁", motto: "Strategic Depth · Ashoka Pillar Caliber" },
+  { level: 4, name: "Colonel", xp: 7000, icon: "🛡️", motto: "Regimental Commander · Comprehensive Mastery" },
+  { level: 5, name: "Brigadier", xp: 12000, icon: "🌟", motto: "Brigade Commander · Elite Speed & Stamina" },
+  { level: 6, name: "General", xp: 20000, icon: "🏆", motto: "Chief of the Cohort · All India Rank Caliber" },
 ];
 
 const BADGE_DEFS: Record<string, { label: string; icon: string; description: string }> = {
-  week_warrior: { label: "Week Warrior", icon: "🔥", description: "7-day practice streak" },
-  iron_will: { label: "Iron Will", icon: "💪", description: "30-day practice streak" },
-  first_test: { label: "First Steps", icon: "🎯", description: "Completed your first test" },
-  perfect_score: { label: "Perfectionist", icon: "💯", description: "Scored 100% on a test" },
-  bookworm: { label: "Bookworm", icon: "📚", description: "Bookmarked 10 questions" },
-  centurion: { label: "Centurion", icon: "⚔️", description: "Answered 100 questions correctly" },
+  first_test: { label: "Commissioning Scroll", icon: "🎯", description: "Completed your first full test simulation" },
+  week_warrior: { label: "Vanguard Citation", icon: "🔥", description: "Unbroken 7-day operational practice streak" },
+  iron_will: { label: "Iron Discipline Medal", icon: "🛡️", description: "30-day unwavering daily study streak" },
+  perfect_score: { label: "Sharpshooter Insignia", icon: "💯", description: "Achieved 100% precision on a test assessment" },
+  centurion: { label: "Centurion Citation", icon: "⚔️", description: "Answered 100 questions correctly" },
+  bookworm: { label: "Strategic Reconnaissance", icon: "🧭", description: "Bookmarked 10 challenging questions for tactical review" },
 };
 
 function UserAvatar({ userName, avatarUrl, className }: { userName: string; avatarUrl?: string | null; className?: string }) {
@@ -539,15 +539,16 @@ export function ProfileContent({ profile: serverProfile, exams, levelData, xpTra
               const isCurrentOrBelow = (levelData?.current_level || 0) >= lvl.level;
               const isCurrent = (levelData?.current_level || 0) === lvl.level;
               return (
-                <div key={lvl.level} className={`flex items-center gap-3 p-2 rounded-lg ${isCurrent ? "bg-primary/10 border border-primary/20" : ""}`}>
-                  <span className="text-xl">{lvl.icon}</span>
+                <div key={lvl.level} className={`flex items-center gap-3 p-2.5 rounded-lg transition-colors ${isCurrent ? "bg-primary/10 border border-primary/25" : "hover:bg-muted/30"}`}>
+                  <span className="text-2xl shrink-0">{lvl.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${isCurrentOrBelow ? "" : "text-muted-foreground"}`}>{lvl.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{lvl.xp} XP required</p>
+                    <p className={`text-sm font-semibold ${isCurrentOrBelow ? "text-foreground" : "text-muted-foreground"}`}>{lvl.name}</p>
+                    <p className="text-[11px] text-muted-foreground/80 leading-tight">{lvl.motto}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{lvl.xp.toLocaleString()} XP required</p>
                   </div>
-                  {isCurrent && <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">Current</span>}
-                  {isCurrentOrBelow && !isCurrent && <span className="text-[10px] text-green-600">✓</span>}
-                  {!isCurrentOrBelow && <span className="text-[10px] text-muted-foreground">🔒</span>}
+                  {isCurrent && <span className="text-[10px] font-semibold text-primary bg-primary/15 border border-primary/25 px-2 py-0.5 rounded-full shrink-0">Current Rank</span>}
+                  {isCurrentOrBelow && !isCurrent && <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>}
+                  {!isCurrentOrBelow && <span className="text-xs text-muted-foreground shrink-0">🔒</span>}
                 </div>
               );
             })}

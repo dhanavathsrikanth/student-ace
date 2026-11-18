@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getExamContext } from "@/lib/exam-context";
 import { createClient } from "@/lib/supabase/server";
-import { getRevisionQueue, addToSRSQueue, updateSRSAfterAnswer, getRevisionDeck } from "@/lib/srs";
+import {
+  getRevisionQueue,
+  addToSRSQueue,
+  addBatchToSRSQueue,
+  updateSRSAfterAnswer,
+  getRevisionDeck,
+} from "@/lib/srs";
+import { DAILY_REVISION_CAP } from "@/lib/revision";
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const action = req.nextUrl.searchParams.get("action");
-  if (action !== "due" && action !== "summary" && action !== "deck") return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  if (action !== "due" && action !== "summary" && action !== "deck")
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   try {
     if (action === "deck") {
       const deck = await getRevisionDeck();
@@ -21,9 +29,13 @@ export async function GET(req: NextRequest) {
     try {
       const deck = await getRevisionDeck();
       const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
-      const queueQuestions = deck.questions.slice(0, 20).map(q => ({
+      const queueQuestions = deck.questions.slice(0, DAILY_REVISION_CAP).map(q => ({
         id: q.id,
         stage: q.stage,
+        interval_days: q.interval_days,
+        repetition_count: q.repetition_count,
+        next_review_date: q.nextReviewDate,
+        source: q.source,
         question: q.question,
       }));
       const fallbackQueue = {
@@ -33,7 +45,7 @@ export async function GET(req: NextRequest) {
           dueCount: queueQuestions.length,
           deferredCount: Math.max(0, deck.totalCount - queueQuestions.length),
           completedCount: 0,
-          dailyCap: 20,
+          dailyCap: DAILY_REVISION_CAP,
           totalCount: queueQuestions.length,
           xpEarned: 0,
           queueComplete: queueQuestions.length === 0,
@@ -55,6 +67,7 @@ export async function POST(req: Request) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const { action, questionId, result, reviewDate, sessionId } = body;
+
   // Process a completed test session: enroll all wrong answers into revision.
   if (action === "process-session") {
     if (!sessionId || typeof sessionId !== "string") {
@@ -75,30 +88,30 @@ export async function POST(req: Request) {
       .select("question_id")
       .eq("session_id", sessionId)
       .eq("is_correct", false);
-    let enrolled = 0;
-    for (const ans of (wrongAnswers || [])) {
+    const qIds = (wrongAnswers || []).map((a) => a.question_id);
+    if (qIds.length > 0) {
       try {
-        await addToSRSQueue(ans.question_id);
-        enrolled++;
-      } catch {
-        // continue enrolling others
+        await addBatchToSRSQueue(qIds);
+      } catch (err) {
+        console.warn("Batch add to SRS fallback to single adds:", err);
+        for (const qid of qIds) {
+          try { await addToSRSQueue(qid); } catch {}
+        }
       }
     }
-    return NextResponse.json({ success: true, enrolled });
+    return NextResponse.json({ success: true, enrolled: qIds.length });
   }
+
   if (action === "enroll-all-mistakes") {
     const supabase = await createClient();
-    // Enroll wrong answers from completed sessions directly (does not depend on
-    // the spaced_repetition SELECT that is permission-revoked).
     const { data: sessions } = await supabase
       .from("test_sessions")
       .select("id")
       .eq("user_id", user.id)
       .eq("status", "completed")
       .eq("exam_id", exam.id)
-      .or(stream ? `stream_id.eq.${stream.id},stream_id.is.null` : "stream_id.is.null")
       .order("completed_at", { ascending: false })
-      .limit(30);
+      .limit(50);
     const sessionIds = (sessions || []).map(s => s.id);
     let enrolled = 0;
     if (sessionIds.length > 0) {
@@ -107,25 +120,32 @@ export async function POST(req: Request) {
         .select("question_id")
         .in("session_id", sessionIds)
         .eq("is_correct", false);
-      for (const ans of (wrongAnswers || [])) {
+      const qIds = [...new Set((wrongAnswers || []).map((a) => a.question_id))];
+      if (qIds.length > 0) {
         try {
-          await addToSRSQueue(ans.question_id);
-          enrolled++;
+          await addBatchToSRSQueue(qIds);
+          enrolled = qIds.length;
         } catch {
-          // continue enrolling others
+          for (const qid of qIds) {
+            try {
+              await addToSRSQueue(qid);
+              enrolled++;
+            } catch {}
+          }
         }
       }
     }
     return NextResponse.json({ success: true, enrolled });
   }
+
   if (!["add", "answer"].includes(action) || typeof questionId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(questionId))
     return NextResponse.json({ error: "Valid action and questionId required" }, { status: 400 });
   if (action === "answer" && (!["correct", "wrong"].includes(result) || typeof reviewDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(reviewDate)))
     return NextResponse.json({ error: "Valid result and reviewDate required" }, { status: 400 });
+
   const supabase = await createClient();
   const { data: question, error } = await supabase.from("questions").select("id")
-    .eq("id", questionId).eq("exam_id", exam.id).eq("marks_to_all", false)
-    .or(stream ? `stream_id.eq.${stream.id},stream_id.is.null` : "stream_id.is.null").maybeSingle();
+    .eq("id", questionId).eq("exam_id", exam.id).eq("marks_to_all", false).maybeSingle();
   if (error) return NextResponse.json({ error: "Unable to verify question" }, { status: 503 });
   if (!question) return NextResponse.json({ error: "Question unavailable for your exam" }, { status: 404 });
   try {

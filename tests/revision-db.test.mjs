@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const migration = fs.readFileSync('supabase/migrations/20261104161916_automated_revision_loop.sql', 'utf8');
 const batchMigration = fs.readFileSync('supabase/migrations/20261117082000_revision_add_batch.sql', 'utf8');
+const fairnessMigration = fs.readFileSync('supabase/migrations/20261118150000_revision_loop_fairness_and_analytics.sql', 'utf8');
 const fixture = `
 create role anon; create role authenticated;
 create schema auth;
@@ -37,16 +38,17 @@ async function setup() {
   await db.exec(fixture);
   await db.exec(migration);
   await db.exec(batchMigration);
+  await db.exec(fairnessMigration);
   return db;
 }
-async function question(db, type = 'MCQ', examId = exam) {
-  return (await db.query('insert into questions(exam_id, question_type) values ($1,$2) returning id', [examId, type])).rows[0].id;
+async function question(db, type = 'MCQ', examId = exam, streamId = null) {
+  return (await db.query('insert into questions(exam_id, question_type, stream_id) values ($1,$2,$3) returning id', [examId, type, streamId])).rows[0].id;
 }
 async function due(db, id, stage = 1) {
   await db.query(`insert into spaced_repetition(user_id, question_id, next_review_date, stage) values ($1,$2, revision_private.today(),$3)`, [user, id, stage]);
 }
-async function queue(db, examId = exam) {
-  return (await db.query('select public.revision_queue($1,null) as value', [examId])).rows[0].value;
+async function queue(db, examId = exam, streamId = null) {
+  return (await db.query('select public.revision_queue($1,$2) as value', [examId, streamId])).rows[0].value;
 }
 async function answer(db, id, correct, day) {
   return (await db.query('select public.revision_answer($1,$2,$3) as value', [id, correct, day])).rows[0].value;
@@ -65,7 +67,8 @@ test('migration enrolls only wrong answers on completion, plus bookmarks and dai
     const daily = (await db.query('insert into daily_questions(question_id) values ($1) returning id', [ids[4]])).rows[0].id;
     await db.query('insert into daily_question_answers values ($1,$2,false)', [user,daily]);
     assert.equal((await db.query('select count(*)::int as n from spaced_repetition')).rows[0].n, 5);
-    assert.equal((await queue(db)).questions.length, 0, 'new mistakes start tomorrow');
+    // Day 1 fairness: newly enrolled mistakes are due immediately on Day 1
+    assert.equal((await queue(db)).questions.length, 5, 'all newly enrolled mistakes are due immediately on Day 1');
     await db.query('update spaced_repetition set stage = 4 where question_id = $1', [ids[3]]);
     await db.query('select revision_add($1)', [ids[3]]);
     assert.equal((await db.query('select stage from spaced_repetition where question_id = $1',[ids[3]])).rows[0].stage, 4, 'bookmark retries preserve progress');
@@ -76,29 +79,65 @@ test('migration enrolls only wrong answers on completion, plus bookmarks and dai
   } finally { await db.close(); }
 });
 
-test('daily cap persists across reloads and exams; lower stages take priority', async () => {
+test('daily queue includes all due mistakes across streams and preserves progress; lower stages take priority', async () => {
   const db = await setup();
   try {
     for (let i=0;i<24;i++) { const id = await question(db, ['MCQ','MSQ','NAT'][i%3]); await due(db,id,i<4?5:1); }
-    const other = await question(db,'MCQ',otherExam); await due(db,other);
+    const unqueuedOther = await question(db,'MCQ',otherExam); await due(db,unqueuedOther);
     const first = await queue(db);
-    assert.equal(first.questions.length,20); assert.equal(first.summary.deferredCount,4);
-    assert.ok(first.questions.every(q => q.stage === 1));
+    // All 24 questions are included; no unfair 6 or 20 cap
+    assert.equal(first.questions.length, 24);
+    assert.equal(first.summary.deferredCount, 0);
+    // Lower stages take priority
+    assert.ok(first.questions[0].stage <= first.questions[first.questions.length - 1].stage);
     assert.deepEqual((await queue(db)).questions.map(q=>q.id), first.questions.map(q=>q.id));
-    assert.equal((await queue(db,otherExam)).questions.length,0,'switching exams cannot bypass cap');
     const item = first.questions[0];
     const saved = await answer(db,item.question.id,true,first.reviewDate);
     assert.equal(saved.stage,2); assert.equal(saved.xpAwarded,10);
     const replay = await answer(db,item.question.id,false,first.reviewDate);
     assert.equal(replay.alreadySaved,true); assert.equal(replay.xpAwarded,0);
-    assert.equal((await queue(db)).questions.length,19,'reviewed questions are not replaced with backlog');
+    assert.equal((await queue(db)).questions.length,23,'reviewed questions are removed from remaining due queue');
     assert.equal((await db.query('select count(*)::int as n from xp_transactions')).rows[0].n,1);
     assert.equal((await db.query('select total_xp from user_levels')).rows[0].total_xp,10);
-    await assert.rejects(answer(db,other,true,first.reviewDate));
+    // Unqueued question must reject
+    await assert.rejects(answer(db,unqueuedOther,true,first.reviewDate));
     await assert.rejects(answer(db,first.questions[1].question.id,true,'2000-01-01'));
     await db.exec(`select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false)`);
     assert.equal((await queue(db)).questions.length,0,'another user cannot see the first queue');
     await assert.rejects(answer(db,item.question.id,true,first.reviewDate));
+  } finally { await db.close(); }
+});
+
+test('aspirant with 100 wrong questions sees all 100 questions on Day 1 without unfair 6-question or 20-question capping', async () => {
+  const db = await setup();
+  try {
+    const qIds = [];
+    const stream1 = '20000000-0000-0000-0000-000000000001';
+    const stream2 = '20000000-0000-0000-0000-000000000002';
+
+    // 100 questions across multiple streams and general common subjects
+    for (let i = 0; i < 100; i++) {
+      const sId = i < 40 ? stream1 : i < 80 ? stream2 : null;
+      const qId = await question(db, 'MCQ', exam, sId);
+      qIds.push(qId);
+    }
+
+    const session = (await db.query('insert into test_sessions(user_id) values ($1) returning id', [user])).rows[0].id;
+    for (const qId of qIds) {
+      await db.query('insert into test_answers(session_id,question_id,is_correct) values($1,$2,false)', [session, qId]);
+    }
+
+    await db.query("update test_sessions set status = 'completed' where id = $1", [session]);
+
+    // Student has 100 wrong answers enrolled
+    const count = (await db.query('select count(*)::int as n from spaced_repetition where user_id = $1', [user])).rows[0].n;
+    assert.equal(count, 100, 'all 100 mistakes enrolled in spaced_repetition');
+
+    // On Revision Day 1, ALL 100 questions appear in queue, not capped at 6 or 20
+    const q1 = await queue(db, exam, stream1);
+    assert.equal(q1.questions.length, 100, 'all 100 questions shown on Day 1 for student');
+    assert.equal(q1.summary.dueCount, 100);
+    assert.equal(q1.summary.totalCount, 100);
   } finally { await db.close(); }
 });
 

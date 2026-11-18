@@ -19,18 +19,46 @@ interface Badge {
 
 const BADGE_DEFINITIONS = [
   {
+    type: "first_test",
+    label: "Commissioning Scroll",
+    icon: "🎯",
+    description: "Completed your inaugural full exam simulation under timed conditions",
+    howToEarn: "Complete your first full-length test session",
+  },
+  {
     type: "week_warrior",
-    label: "Week Warrior",
+    label: "Vanguard Citation",
     icon: "🔥",
-    description: "Maintained a 7-day practice streak",
+    description: "Maintained an unbroken 7-day operational practice streak",
     howToEarn: "Practice for 7 consecutive days",
   },
   {
+    type: "perfect_score",
+    label: "Sharpshooter Insignia",
+    icon: "💯",
+    description: "Achieved 100% precision on a test assessment",
+    howToEarn: "Score 100% on any mock test (min 5 questions)",
+  },
+  {
+    type: "centurion",
+    label: "Centurion Citation",
+    icon: "⚔️",
+    description: "Answered 100 verified examination questions correctly",
+    howToEarn: "Solve 100 questions correctly across all tests",
+  },
+  {
     type: "iron_will",
-    label: "Iron Will",
-    icon: "💪",
-    description: "Maintained a 30-day practice streak",
+    label: "Iron Discipline Medal",
+    icon: "🛡️",
+    description: "Maintained a 30-day unwavering daily study streak",
     howToEarn: "Practice for 30 consecutive days",
+  },
+  {
+    type: "subject_master",
+    label: "Regimental Mastery",
+    icon: "🎓",
+    description: "Achieved 80%+ accuracy across all syllabus subjects",
+    howToEarn: "Attain >=80% accuracy in every exam subject",
   },
 ];
 
@@ -128,8 +156,13 @@ export function BadgeGrid() {
                       {earned ? def.description : def.howToEarn}
                     </p>
                     {earned && (
-                      <p className="text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        Unlocked at {def.type === "week_warrior" ? "7" : "30"} day streak
+                      <p className="text-emerald-600 dark:text-emerald-400 mt-0.5 font-medium">
+                        {def.type === "week_warrior" && "Awarded for 7-day operational streak"}
+                        {def.type === "iron_will" && "Awarded for 30-day unwavering streak"}
+                        {def.type === "first_test" && "Awarded on first test completion"}
+                        {def.type === "perfect_score" && "Awarded for 100% accuracy precision"}
+                        {def.type === "centurion" && "Awarded for 100 correct answers"}
+                        {def.type === "subject_master" && "Awarded for 80%+ cross-subject mastery"}
                       </p>
                     )}
                   </motion.div>

@@ -31,7 +31,7 @@ test('calendar targets use IST and expired countdowns never become negative', ()
   assert.equal(countdown.countdownTarget(null), null);
 });
 test('profile XP expands, reports remaining XP correctly, and refreshes without polling hidden pages', async () => {
-  let data = { totalXP: 280, currentLevel: 0, levelName: 'Trainee', xpForNextLevel: 220, xpProgress: 56, nextLevelName: 'Explorer' };
+  let data = { totalXP: 280, currentLevel: 0, levelName: 'Officer Cadet', xpForNextLevel: 220, xpProgress: 56, nextLevelName: 'Lieutenant' };
   let tick, calls = 0, cleared = false;
   const events = new Map();
   const document = { hidden: false, addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) };
@@ -45,7 +45,7 @@ test('profile XP expands, reports remaining XP correctly, and refreshes without 
   try {
     await act(async () => { renderer = create(React.createElement(XPBar)); });
     assert.match(text(renderer.toJSON()), /280 total XP/);
-    assert.match(text(renderer.toJSON()), /220 XP to Explorer/);
+    assert.match(text(renderer.toJSON()), /220 XP to Lieutenant/);
     assert.equal(renderer.root.findByType('button').props['aria-expanded'], false);
     await act(async () => { renderer.root.findByType('button').props.onClick(); });
     assert.equal(renderer.root.findByType('button').props['aria-expanded'], true);
@@ -54,9 +54,9 @@ test('profile XP expands, reports remaining XP correctly, and refreshes without 
     await act(async () => { await tick(); });
     assert.equal(calls, 1);
     document.hidden = false;
-    data = { totalXP: 520, currentLevel: 1, levelName: 'Explorer', xpForNextLevel: 980, xpProgress: 2, nextLevelName: 'Practitioner' };
+    data = { totalXP: 520, currentLevel: 1, levelName: 'Lieutenant', xpForNextLevel: 980, xpProgress: 2, nextLevelName: 'Captain' };
     await act(async () => { await events.get('visibilitychange')(); });
-    assert.match(text(renderer.toJSON()), /980 XP to Practitioner/);
+    assert.match(text(renderer.toJSON()), /980 XP to Captain/);
     assert.equal(renderer.root.findByProps({ role: 'progressbar' }).props['aria-valuenow'], 2);
   } finally { if (renderer) await act(async () => renderer.unmount()); }
   assert.equal(cleared, true);

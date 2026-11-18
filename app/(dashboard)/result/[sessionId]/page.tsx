@@ -29,19 +29,25 @@ async function ResultPageContent({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  const { user, exam, stream } = await requireExamContext();
+  const { user, exam, profile, stream } = await requireExamContext();
   const supabase = await createClient();
 
   const userId = user.id;
+  const isAdmin = profile?.role === "admin";
 
-  const { data: session, error: sessionError } = await supabase
+  let sessionQuery = supabase
     .from("test_sessions")
     .select("*")
-    .eq("exam_id", exam.id)
-    .or(stream ? `stream_id.eq.${stream.id}` : "stream_id.is.null")
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .single();
+    .eq("id", sessionId);
+
+  if (!isAdmin) {
+    sessionQuery = sessionQuery
+      .eq("exam_id", exam.id)
+      .or(stream ? `stream_id.eq.${stream.id}` : "stream_id.is.null")
+      .eq("user_id", userId);
+  }
+
+  const { data: session, error: sessionError } = await sessionQuery.single();
 
   if (sessionError || !session) {
     notFound();
@@ -209,11 +215,15 @@ async function ResultPageContent({
     };
   }
 
+  const targetUserId = session.user_id || userId;
+
   return (
     <ResultContent
+      userId={targetUserId}
+      isAdmin={isAdmin}
       diagnosticPanel={
         <Suspense fallback={<section role="status" className="rounded-xl border p-4 text-sm text-muted-foreground">Analysing your answers…</section>}>
-          <SessionConcepts userId={userId} examId={exam.id} streamId={stream?.id ?? null} sessionId={sessionId} />
+          <SessionConcepts userId={targetUserId} examId={exam.id} streamId={stream?.id ?? null} sessionId={sessionId} />
         </Suspense>
       }
       marks={{

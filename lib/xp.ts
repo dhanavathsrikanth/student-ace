@@ -17,19 +17,22 @@ export interface AwardXPResult {
   newLevelNumber: number | null;
 }
 
-const XP_THRESHOLDS = [
-  { level: 0, name: "Trainee", xp: 0 },
-  { level: 1, name: "Explorer", xp: 500 },
-  { level: 2, name: "Practitioner", xp: 1500 },
-  { level: 3, name: "Achiever", xp: 3500 },
-  { level: 4, name: "Advanced Learner", xp: 7000 },
-  { level: 5, name: "Expert", xp: 12000 },
-  { level: 6, name: "Master", xp: 20000 },
+export const XP_THRESHOLDS = [
+  { level: 0, name: "Officer Cadet", xp: 0 },
+  { level: 1, name: "Lieutenant", xp: 500 },
+  { level: 2, name: "Captain", xp: 1500 },
+  { level: 3, name: "Major", xp: 3500 },
+  { level: 4, name: "Colonel", xp: 7000 },
+  { level: 5, name: "Brigadier", xp: 12000 },
+  { level: 6, name: "General", xp: 20000 },
 ];
 
 export const XP_REWARDS = {
   CORRECT_ANSWER: 10,
-  PERFECT_SCORE_BONUS: 50,
+  PERFECT_SCORE_BONUS: 100,
+  HIGH_ACCURACY_BONUS: 50,
+  FULL_MOCK_COMPLETED: 150,
+  MINI_MOCK_COMPLETED: 50,
   DAILY_QUESTION_CORRECT: 25,
   DAILY_QUESTION_ATTEMPTED: 10,
   WEEK_WARRIOR_STREAK: 150,
@@ -191,12 +194,29 @@ export async function awardTestXP(
 
   const correctCount = (answers || []).filter((a) => a.is_correct === true).length;
 
+  // Base XP: 10 XP per correct question
   let totalXP = correctCount * XP_REWARDS.CORRECT_ANSWER;
-  const reasons: string[] = [`${correctCount} correct answers`];
+  const reasons: string[] = [`${correctCount} correct answers (+${correctCount * XP_REWARDS.CORRECT_ANSWER} XP)`];
 
-  if (correctCount === session.total_questions && correctCount > 0) {
+  // Accuracy bonuses
+  const totalQuestions = session.total_questions || 0;
+  const accuracyPct = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
+
+  if (correctCount === totalQuestions && totalQuestions > 0) {
     totalXP += XP_REWARDS.PERFECT_SCORE_BONUS;
-    reasons.push("perfect score bonus");
+    reasons.push(`Sharpshooter 100% Precision (+${XP_REWARDS.PERFECT_SCORE_BONUS} XP)`);
+  } else if (accuracyPct >= 80 && totalQuestions >= 10) {
+    totalXP += XP_REWARDS.HIGH_ACCURACY_BONUS;
+    reasons.push(`High Accuracy ${accuracyPct.toFixed(0)}% (+${XP_REWARDS.HIGH_ACCURACY_BONUS} XP)`);
+  }
+
+  // Assessment scale bonus (rewards stamina on full length tests)
+  if (totalQuestions >= 30) {
+    totalXP += XP_REWARDS.FULL_MOCK_COMPLETED;
+    reasons.push(`Full Mock Completion (+${XP_REWARDS.FULL_MOCK_COMPLETED} XP)`);
+  } else if (totalQuestions >= 15) {
+    totalXP += XP_REWARDS.MINI_MOCK_COMPLETED;
+    reasons.push(`Sprint Test Completion (+${XP_REWARDS.MINI_MOCK_COMPLETED} XP)`);
   }
 
   const { data: prevSessions } = await supabase
@@ -208,13 +228,14 @@ export async function awardTestXP(
 
   if (!prevSessions || prevSessions.length === 0) {
     totalXP += XP_REWARDS.FIRST_TEST_BONUS;
-    reasons.push("first test bonus");
+    reasons.push(`Commissioning Test (+${XP_REWARDS.FIRST_TEST_BONUS} XP)`);
   }
 
-  return awardXP(userId, totalXP, `Test: ${reasons.join(" + ")}`, {
+  return awardXP(userId, totalXP, `Test: ${reasons.join(" · ")}`, {
     session_id: sessionId,
     correct_count: correctCount,
-    total_questions: session.total_questions,
+    total_questions: totalQuestions,
+    accuracy: accuracyPct,
   });
 }
 

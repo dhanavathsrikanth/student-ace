@@ -204,13 +204,13 @@ export function BadgesClient({ initialBadges, initialThresholds, initialXpRules 
         // Use the thresholds to make a simple estimate
         const avgXpPerUser = 0;
         if (thresholds.length > 2) {
-          const l2 = thresholds[2]; // Level 2 (index 2 = AEE)
-          const l3 = thresholds[3]; // Level 3 (Achiever)
+          const l2 = thresholds[2]; // Level 2 (Captain)
+          const l3 = thresholds[3]; // Level 3 (Major)
           if (l2 && l3) {
             const gap = l3.xp_required - l2.xp_required;
-            // Rough estimate: if avg user earns ~25 XP/day (1 daily question + some tests)
-            const estDays = Math.ceil(gap / 35);
-            setLevelsPreview(`At ~35 XP/day average, a user reaches ${l3.name} (Level ${l3.level}) in ~${estDays} days after ${l2.name} (Level ${l2.level})`);
+            // Rough estimate: if avg user earns ~50 XP/day (daily recons + practice sessions)
+            const estDays = Math.ceil(gap / 50);
+            setLevelsPreview(`At ~50 XP/day average, an officer candidate reaches ${l3.name} (Level ${l3.level}) in ~${estDays} days after commissioning as ${l2.name} (Level ${l2.level})`);
           } else {
             setLevelsPreview("");
           }

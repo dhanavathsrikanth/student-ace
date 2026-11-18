@@ -203,6 +203,22 @@ function SignUpFormInner() {
             Login
           </Link>
         </div>
+
+        <p className="text-center text-[11px] text-muted-foreground leading-relaxed pt-2 border-t">
+          By signing up or continuing, you agree to StudentAce&apos;s{" "}
+          <Link href="/terms" className="text-primary underline underline-offset-2 hover:opacity-80">
+            Terms of Service
+          </Link>
+          ,{" "}
+          <Link href="/privacy" className="text-primary underline underline-offset-2 hover:opacity-80">
+            Privacy Policy
+          </Link>
+          , and{" "}
+          <Link href="/disclaimer" className="text-primary underline underline-offset-2 hover:opacity-80">
+            Disclaimer
+          </Link>
+          .
+        </p>
       </CardContent>
     </Card>
   );

@@ -131,9 +131,31 @@ export default async function DashboardPage() {
 
   type DashboardAnswer = MetricsAnswer & {
     session_id: string;
-    questions?: (MetricsQuestion & { subjects?: { name: string } | null }) | null;
+    questions?: (MetricsQuestion & { subjects?: { id?: string; name: string } | null }) | null;
   };
   const answerList = (allAnswers || []) as unknown as DashboardAnswer[];
+
+  // Build subject name map from joined subjects or fallback query
+  const subjectNameMap = new Map<string, string>();
+  for (const answer of answerList) {
+    if (answer.questions?.subject_id && answer.questions.subjects?.name) {
+      subjectNameMap.set(answer.questions.subject_id, answer.questions.subjects.name);
+    }
+  }
+
+  // Fetch subject names if any are missing or unresolved
+  const unresolvedSubjectIds = answerList
+    .map((a) => a.questions?.subject_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0 && !subjectNameMap.has(id));
+  if (unresolvedSubjectIds.length > 0) {
+    const { data: dbSubjects } = await supabase
+      .from("subjects")
+      .select("id, name")
+      .in("id", [...new Set(unresolvedSubjectIds)]);
+    for (const sub of dbSubjects || []) {
+      subjectNameMap.set(sub.id, sub.name);
+    }
+  }
 
   const answersBySession = new Map<string, DashboardAnswer[]>();
   for (const answer of answerList) {
@@ -155,10 +177,10 @@ export default async function DashboardPage() {
   });
 
   const allRecords = sessionRecords.flatMap((entry) => entry.records);
-  const overall = summarizeAttempts(allRecords);
+  const overall = summarizeAttempts(allRecords, { subjectNames: subjectNameMap });
 
   const sessionScores = sessionRecords.map(({ session, records }) => {
-    const stats = summarizeAttempts(records).stats;
+    const stats = summarizeAttempts(records, { subjectNames: subjectNameMap }).stats;
     const subjectName =
       (session.subjects as unknown as { name?: string } | null)?.name || "General";
     return {

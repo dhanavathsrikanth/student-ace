@@ -135,7 +135,7 @@ export default async function UserDetailPage(props: { params: Promise<{ userId: 
   });
 
   const level = levelRes ? (levelRes as any).current_level ?? 0 : 0;
-  const levelName = levelRes ? (levelRes as any).level_name ?? "Trainee" : "Trainee";
+  const levelName = levelRes ? (levelRes as any).level_name ?? "Officer Cadet" : "Officer Cadet";
   const streak = streakRes ? (streakRes as any).current_streak ?? 0 : 0;
   const longestStreak = streakRes ? (streakRes as any).longest_streak ?? 0 : 0;
   const lastActiveDate = streakRes ? (streakRes as any).last_activity_date ?? null : null;
