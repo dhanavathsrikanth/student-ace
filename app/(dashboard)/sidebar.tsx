@@ -124,6 +124,9 @@ export function Sidebar({ userName, userRole, avatarUrl }: SidebarProps) {
           >
             <span className={styles.brandIcon}><GraduationCap className="h-5 w-5" /></span>
             StudentAce
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-primary/30 text-primary bg-primary/10">
+              Beta
+            </span>
           </Link>
         </div>
 

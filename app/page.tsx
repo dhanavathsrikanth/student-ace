@@ -14,16 +14,26 @@ import {
   ShieldAlert,
   Calculator,
   Mail,
+  Sparkles,
 } from "lucide-react";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const { data: general } = await supabase
-    .from("app_config")
-    .select("value")
-    .eq("key", "general")
-    .maybeSingle();
-  const maintenanceMode = ((general?.value as any)?.maintenanceMode) === true;
+  let maintenanceMode = false;
+  try {
+    const supabase = await createClient();
+    const configPromise = supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "general")
+      .maybeSingle();
+    const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null }), 1200)
+    );
+    const { data: general } = await Promise.race([configPromise, timeoutPromise]);
+    maintenanceMode = ((general?.value as any)?.maintenanceMode) === true;
+  } catch {
+    maintenanceMode = false;
+  }
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
@@ -34,6 +44,9 @@ export default async function Home() {
           <Link href="/" className="flex items-center gap-2 font-bold text-lg hover:opacity-90 transition-opacity">
             <GraduationCap className="h-6 w-6 text-primary" />
             <span>StudentAce</span>
+            <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 border-primary/30 text-primary bg-primary/10">
+              Beta
+            </Badge>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
             <Button variant="outline" size="sm" asChild className="text-xs font-medium">
@@ -48,9 +61,20 @@ export default async function Home() {
 
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-14 sm:pb-20 text-center flex-1">
-        <div className="inline-flex items-center gap-2 rounded-full border bg-muted/60 px-3.5 py-1 text-xs sm:text-sm text-muted-foreground mb-6 shadow-xs">
-          <GraduationCap className="h-4 w-4 text-primary" />
-          <span>Preparation built around your exam</span>
+        <div className="flex flex-col items-center gap-3 mb-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-primary shadow-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+            </span>
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span>StudentAce Public Beta • Actively refined with continuous student updates</span>
+          </div>
+
+          <div className="inline-flex items-center gap-2 rounded-full border bg-muted/60 px-3.5 py-1 text-xs sm:text-sm text-muted-foreground shadow-xs">
+            <GraduationCap className="h-4 w-4 text-primary" />
+            <span>Preparation built around your exam</span>
+          </div>
         </div>
         <h1 className="text-3xl sm:text-5xl font-black tracking-tight max-w-3xl mx-auto leading-tight sm:leading-tight">
           Prepare for your exam with{" "}

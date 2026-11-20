@@ -16,6 +16,9 @@ export default function LegalLayout({
             <Link href="/" className="flex items-center gap-2 font-bold text-lg hover:opacity-90 transition-opacity">
               <GraduationCap className="h-6 w-6 text-primary" />
               <span>StudentAce</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-primary/30 text-primary bg-primary/10">
+                Beta
+              </span>
             </Link>
             <span className="text-muted-foreground/40 text-sm hidden sm:inline">/</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary hidden sm:inline">
